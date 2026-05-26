@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ConversationType {
+  DM
+  GROUP
+}
+
+enum MemberRole {
+  MEMBER
+  ADMIN
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  FILE
+  AUDIO
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+enum CallType {
+  VOICE
+  VIDEO
+}
+
+enum CallStatus {
+  MISSED
+  COMPLETED
+  DECLINED
+  ONGOING
+}
+
+enum NotificationType {
+  NEW_MESSAGE
+  NEW_CALL
+  GROUP_INVITE
+  MENTION
+  SYSTEM
+}
+
+
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  phoneNumber String?   @unique
+  password    String
+  displayName String
+  avatarUrl   String?
+  bio         String?
+  fcmToken    String? 
+  status      String?   @default("Hey there! I am using Novu")
+  isOnline    Boolean   @default(false)
+  lastSeen    DateTime  @default(now())
+  role        Role      @default(USER)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  sentMessages        Message[]            @relation("SentMessages")
+  conversationMembers ConversationMember[]
+  callsMade           Call[]               @relation("CallerCalls")
+  callsReceived       Call[]               @relation("ReceiverCalls")
+  notifications       Notification[]
+  uploadedMedia       Media[]
+  refreshTokens       RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Conversation {
+  id          String           @id @default(uuid())
+  type        ConversationType @default(DM)
+  name        String?
+  avatarUrl   String?
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@index([updatedAt])
+  @@map("conversations")
+}
+
+
+model ConversationMember {
+  id             String     @id @default(uuid())
+  conversationId String
+  userId         String
+  role           MemberRole @default(MEMBER)
+  joinedAt       DateTime   @default(now())
+  leftAt         DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, leftAt])
+  @@index([conversationId, leftAt])
+  @@map("conversation_members")
+}
+
+
+model Message {
+  id             String        @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String?
+  messageType    MessageType   @default(TEXT)
+  status         MessageStatus @default(SENT)
+  replyToId      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo      Message?     @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies      Message[]    @relation("MessageReplies")
+  media        Media[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@index([status])
+  @@map("messages")
+}
+
+
+model Media {
+  id         String   @id @default(uuid())
+  messageId  String?
+  uploadedBy String
+  fileUrl    String
+  fileType   String
+  fileSize   Int
+  fileName   String?
+  createdAt  DateTime @default(now())
+
+  message  Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  uploader User     @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@index([uploadedBy])
+  @@index([messageId])
+  @@map("media")
+}
+
+
+model Call {
+  id         String     @id @default(uuid())
+  callerId   String
+  receiverId String
+  type       CallType   @default(VOICE)
+  status     CallStatus @default(ONGOING)
+  startedAt  DateTime   @default(now())
+  endedAt    DateTime?
+  duration   Int?
+
+  caller   User @relation("CallerCalls", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceiverCalls", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([callerId])
+  @@index([receiverId])
+  @@index([status])
+  @@map("calls")
+}
+
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
