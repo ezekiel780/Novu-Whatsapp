@@ -471,7 +471,7 @@ http://localhost:3000/api/docs
 ## Author
 
 **Balogun Ezekiel**
-Fullstack Developer and Programming Tutor at ExpertHive
+Fullstack Engineer at Archsaintnexus and Programming Tutor at ExpertHive
 
 - Tutoring: [https://www.experthivetutors.com/tutor/BALOGUN-EZEKIEL-34](https://www.experthivetutors.com/tutor/BALOGUN-EZEKIEL-34)
 
