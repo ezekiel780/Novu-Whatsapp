@@ -11,6 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
+import { generateOTP } from '../helpers/token.helper';
 
 @Injectable()
 export class AuthService {
@@ -38,8 +39,10 @@ export class AuthService {
       },
     });
 
-    const tokens = await this.generateTokens(user.id, user.email);
-    return { user: this.exclude(user, ['password']), ...tokens };
+    return {
+      message: 'Registration successful. Please login to continue',
+      user: this.exclude(user, ['password']),
+    };
   }
 
   // ── Login ─────────────────────────────────
@@ -93,21 +96,14 @@ export class AuthService {
 
   // ── Forgot Password ───────────────────────
   async forgotPassword(dto: ForgotPasswordDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-    if (!user) return { message: 'If that email exists, an OTP was sent' };
+    await this.issuePasswordResetOtp(dto.email);
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashed = await bcrypt.hash(otp, 10);
+    return { message: 'If that email exists, an OTP was sent' };
+  }
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { status: `otp:${hashed}` },
-    });
-
-    // TODO: Send OTP via email service
-    console.log(`OTP for ${user.email}: ${otp}`);
+  // ── Resend OTP ──────────────────────────────
+  async resendOtp(dto: ForgotPasswordDto) {
+    await this.issuePasswordResetOtp(dto.email);
 
     return { message: 'If that email exists, an OTP was sent' };
   }
@@ -120,7 +116,16 @@ export class AuthService {
     if (!user || !user.status?.startsWith('otp:'))
       throw new BadRequestException('Invalid or expired OTP');
 
-    const storedHash = user.status.replace('otp:', '');
+    const otpPayload = user.status.replace('otp:', '');
+    const [storedHash, expiresAtIso] = otpPayload.split('|');
+
+    if (!storedHash || !expiresAtIso)
+      throw new BadRequestException('Invalid or expired OTP');
+
+    const expiresAt = new Date(expiresAtIso);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt < new Date())
+      throw new BadRequestException('Invalid or expired OTP');
+
     const valid = await bcrypt.compare(dto.otp, storedHash);
     if (!valid) throw new BadRequestException('Invalid OTP');
 
@@ -128,6 +133,10 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: user.id },
       data: { password: hashed, status: null },
+    });
+
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId: user.id },
     });
 
     return { message: 'Password reset successfully' };
@@ -161,6 +170,26 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken };
+  }
+
+  private async issuePasswordResetOtp(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) return;
+
+    const otp = generateOTP();
+    const hashed = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { status: `otp:${hashed}|${expiresAt.toISOString()}` },
+    });
+
+    // TODO: Send OTP via email service
+    console.log(`OTP for ${user.email}: ${otp}`);
   }
 
   private exclude<T, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {

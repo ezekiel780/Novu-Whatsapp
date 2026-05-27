@@ -38,6 +38,11 @@ export class AuthController {
     return this.authService.forgotPassword(dto);
   }
 
+  @Post('resend-otp')
+  resendOtp(@Body() dto: ForgotPasswordDto) {
+    return this.authService.resendOtp(dto);
+  }
+
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);

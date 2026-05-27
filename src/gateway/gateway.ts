@@ -34,6 +34,33 @@ export class NovuGateway
   private logger = new Logger('NovuGateway');
   private connectedUsers = new Map<string, string>();
 
+  private extractAccessToken(client: Socket): string | null {
+    const authToken = client.handshake.auth?.access_token || client.handshake.auth?.token;
+    if (typeof authToken === 'string' && authToken.trim()) {
+      return authToken.trim();
+    }
+
+    const authHeader = client.handshake.headers?.authorization;
+    if (typeof authHeader === 'string' && authHeader.trim()) {
+      if (authHeader.startsWith('Bearer ')) {
+        return authHeader.slice(7).trim();
+      }
+      return authHeader.trim();
+    }
+
+    const accessHeader =
+      client.handshake.headers?.['access_token'] ||
+      client.handshake.headers?.['x-access-token'];
+    if (typeof accessHeader === 'string' && accessHeader.trim()) {
+      return accessHeader.trim();
+    }
+    if (Array.isArray(accessHeader) && accessHeader.length > 0) {
+      return String(accessHeader[0]).trim();
+    }
+
+    return null;
+  }
+
   constructor(
     private messagesService: MessagesService,
     private usersService: UsersService,
@@ -49,9 +76,7 @@ export class NovuGateway
   // ── Connection ────────────────────────────
   async handleConnection(client: Socket) {
     try {
-      const token =
-        client.handshake.auth?.token ||
-        client.handshake.headers?.authorization?.split(' ')[1];
+      const token = this.extractAccessToken(client);
 
       if (!token) {
         client.disconnect();
