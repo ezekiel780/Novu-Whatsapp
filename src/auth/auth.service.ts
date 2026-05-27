@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
+import { Resend } from 'resend';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
@@ -16,11 +17,18 @@ import { generateOTP } from '../helpers/token.helper';
 
 @Injectable()
 export class AuthService {
+  private readonly resend: Resend;
+  private readonly resendFromEmail: string;
+
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
-  ) {}
+  ) {
+    this.resend = new Resend(this.config.get<string>('RESEND_API_KEY'));
+    this.resendFromEmail =
+      this.config.get<string>('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
+  }
 
   // ── Register ──────────────────────────────
   async register(dto: RegisterDto) {
@@ -240,8 +248,13 @@ export class AuthService {
       },
     });
 
-    // TODO: Send OTP via email service
-    console.log(`OTP for ${user.email}: ${otp}`);
+    await this.sendOtpEmail({
+      to: user.email,
+      subject: 'Reset your password OTP',
+      heading: 'Password reset OTP',
+      otp,
+      expiresInMinutes: 10,
+    });
   }
 
   private async issueEmailVerificationOtp(userId: string, email: string) {
@@ -257,8 +270,50 @@ export class AuthService {
       },
     });
 
-    // TODO: Send OTP via email service
-    console.log(`Email verification OTP for ${email}: ${otp}`);
+    await this.sendOtpEmail({
+      to: email,
+      subject: 'Verify your email OTP',
+      heading: 'Email verification OTP',
+      otp,
+      expiresInMinutes: 10,
+    });
+  }
+
+  private async sendOtpEmail(params: {
+    to: string;
+    subject: string;
+    heading: string;
+    otp: string;
+    expiresInMinutes: number;
+  }) {
+    const { to, subject, heading, otp, expiresInMinutes } = params;
+    const apiKey = this.config.get<string>('RESEND_API_KEY');
+
+    if (!apiKey) {
+      throw new BadRequestException(
+        'Email service is not configured. Set RESEND_API_KEY.',
+      );
+    }
+
+    const { error } = await this.resend.emails.send({
+      from: this.resendFromEmail,
+      to,
+      subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+          <h2>${heading}</h2>
+          <p>Use the OTP below to continue:</p>
+          <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px;">${otp}</p>
+          <p>This OTP expires in ${expiresInMinutes} minutes.</p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      throw new BadRequestException(
+        `Failed to send OTP email: ${error.message}`,
+      );
+    }
   }
 
   private exclude<T, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
