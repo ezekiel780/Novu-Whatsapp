@@ -14,7 +14,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MediaService } from './media.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
 
 @ApiTags('Media')
@@ -26,6 +26,16 @@ export class MediaController {
 
   @Post('upload')
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        messageId: { type: 'string', nullable: true },
+      },
+    },
+  })
   @UseInterceptors(
     FileInterceptor('file', { storage: memoryStorage() }),
   )
@@ -38,6 +48,16 @@ export class MediaController {
   }
 
   @Post('signed-url')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['fileName', 'fileType'],
+      properties: {
+        fileName: { type: 'string', example: 'photo.jpg' },
+        fileType: { type: 'string', example: 'image/jpeg' },
+      },
+    },
+  })
   getSignedUrl(
     @Req() req: any,
     @Body('fileName') fileName: string,

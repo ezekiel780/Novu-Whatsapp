@@ -2,7 +2,7 @@ import { Controller, Post, Get, Body, Query, Res } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('WhatsApp Webhook')
 @Controller('webhook')
@@ -31,6 +31,28 @@ export class WebhookController {
 
   // ── Receive Webhook ───────────────────────
   @Post('whatsapp')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      additionalProperties: true,
+      example: {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'WHATSAPP_BUSINESS_ACCOUNT_ID',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  })
   async receiveWebhook(@Body() body: any) {
     await this.notificationsService.handleWhatsAppWebhook(body);
     return { status: 'ok' };
