@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -19,6 +20,16 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post('verify-email')
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Post('resend-verification-otp')
+  resendVerificationOtp(@Body() dto: ForgotPasswordDto) {
+    return this.authService.resendVerificationOtp(dto);
   }
 
   @Post('refresh')

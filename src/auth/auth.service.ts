@@ -11,6 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { generateOTP } from '../helpers/token.helper';
 
 @Injectable()
@@ -39,8 +40,11 @@ export class AuthService {
       },
     });
 
+    await this.issueEmailVerificationOtp(user.id, user.email);
+
     return {
-      message: 'Registration successful. Please login to continue',
+      message:
+        'Registration successful. Please verify your email with the OTP sent to continue',
       user: this.exclude(user, ['password']),
     };
   }
@@ -55,6 +59,10 @@ export class AuthService {
 
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (!user.emailVerified)
+      throw new UnauthorizedException(
+        'Please verify your email before logging in',
+      );
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -63,6 +71,51 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user.id, user.email);
     return { user: this.exclude(user, ['password']), ...tokens };
+  }
+
+  // ── Verify Email ───────────────────────────
+  async verifyEmail(dto: VerifyEmailDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (
+      !user ||
+      !user.emailVerificationOtpHash ||
+      !user.emailVerificationOtpExpiresAt
+    )
+      throw new BadRequestException('Invalid or expired OTP');
+
+    if (user.emailVerificationOtpExpiresAt < new Date())
+      throw new BadRequestException('Invalid or expired OTP');
+
+    const valid = await bcrypt.compare(dto.otp, user.emailVerificationOtpHash);
+    if (!valid) throw new BadRequestException('Invalid OTP');
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        emailVerificationOtpHash: null,
+        emailVerificationOtpExpiresAt: null,
+      },
+    });
+
+    return { message: 'Email verified successfully. You can now login.' };
+  }
+
+  // ── Resend Verification OTP ────────────────
+  async resendVerificationOtp(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (!user) return { message: 'If that email exists, an OTP was sent' };
+    if (user.emailVerified)
+      return { message: 'Email is already verified. Please login.' };
+
+    await this.issueEmailVerificationOtp(user.id, user.email);
+
+    return { message: 'If that email exists, an OTP was sent' };
   }
 
   // ── Refresh Token ─────────────────────────
@@ -113,26 +166,22 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (!user || !user.status?.startsWith('otp:'))
+    if (!user || !user.passwordResetOtpHash || !user.passwordResetOtpExpiresAt)
+      throw new BadRequestException('Invalid or expired OTP');
+    if (user.passwordResetOtpExpiresAt < new Date())
       throw new BadRequestException('Invalid or expired OTP');
 
-    const otpPayload = user.status.replace('otp:', '');
-    const [storedHash, expiresAtIso] = otpPayload.split('|');
-
-    if (!storedHash || !expiresAtIso)
-      throw new BadRequestException('Invalid or expired OTP');
-
-    const expiresAt = new Date(expiresAtIso);
-    if (Number.isNaN(expiresAt.getTime()) || expiresAt < new Date())
-      throw new BadRequestException('Invalid or expired OTP');
-
-    const valid = await bcrypt.compare(dto.otp, storedHash);
+    const valid = await bcrypt.compare(dto.otp, user.passwordResetOtpHash);
     if (!valid) throw new BadRequestException('Invalid OTP');
 
     const hashed = await bcrypt.hash(dto.newPassword, 12);
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { password: hashed, status: null },
+      data: {
+        password: hashed,
+        passwordResetOtpHash: null,
+        passwordResetOtpExpiresAt: null,
+      },
     });
 
     await this.prisma.refreshToken.deleteMany({
@@ -185,11 +234,31 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { status: `otp:${hashed}|${expiresAt.toISOString()}` },
+      data: {
+        passwordResetOtpHash: hashed,
+        passwordResetOtpExpiresAt: expiresAt,
+      },
     });
 
     // TODO: Send OTP via email service
     console.log(`OTP for ${user.email}: ${otp}`);
+  }
+
+  private async issueEmailVerificationOtp(userId: string, email: string) {
+    const otp = generateOTP();
+    const hashed = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        emailVerificationOtpHash: hashed,
+        emailVerificationOtpExpiresAt: expiresAt,
+      },
+    });
+
+    // TODO: Send OTP via email service
+    console.log(`Email verification OTP for ${email}: ${otp}`);
   }
 
   private exclude<T, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {

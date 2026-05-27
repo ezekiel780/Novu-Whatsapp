@@ -63,6 +63,11 @@ model User {
   email       String    @unique
   phoneNumber String?   @unique
   password    String
+  emailVerified                Boolean   @default(false)
+  emailVerificationOtpHash     String?
+  emailVerificationOtpExpiresAt DateTime?
+  passwordResetOtpHash         String?
+  passwordResetOtpExpiresAt    DateTime?
   displayName String
   avatarUrl   String?
   bio         String?
