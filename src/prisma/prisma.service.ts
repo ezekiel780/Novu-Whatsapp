@@ -8,6 +8,11 @@ export class PrismaService extends PrismaClient
   implements OnModuleInit, OnModuleDestroy {
 
   constructor() {
+    const shouldLogQueries = process.env.PRISMA_LOG_QUERIES === 'true';
+    const prismaLogs: ('query' | 'info' | 'warn' | 'error')[] = shouldLogQueries
+      ? ['query', 'info', 'warn', 'error']
+      : ['warn', 'error'];
+
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
     });
@@ -15,7 +20,7 @@ export class PrismaService extends PrismaClient
 
     super({
       adapter,
-      log: ['query', 'info', 'warn', 'error'],
+      log: prismaLogs,
     });
   }
 

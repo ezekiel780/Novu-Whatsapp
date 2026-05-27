@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class ForgotPasswordDto {
   @IsEmail()
@@ -15,4 +15,14 @@ export class ResetPasswordDto {
   @IsString()
   @MinLength(8)
   newPassword: string;
+}
+
+export class ResendOtpDto {
+  @IsEmail()
+  email: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['verification', 'password-reset'])
+  purpose?: 'verification' | 'password-reset';
 }

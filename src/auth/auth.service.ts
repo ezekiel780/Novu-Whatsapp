@@ -11,7 +11,11 @@ import * as bcrypt from 'bcryptjs';
 import { Resend } from 'resend';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { ForgotPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
+import {
+  ForgotPasswordDto,
+  ResendOtpDto,
+  ResetPasswordDto,
+} from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { generateOTP } from '../helpers/token.helper';
 
@@ -112,20 +116,6 @@ export class AuthService {
     return { message: 'Email verified successfully. You can now login.' };
   }
 
-  // ── Resend Verification OTP ────────────────
-  async resendVerificationOtp(dto: ForgotPasswordDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-    if (!user) return { message: 'If that email exists, an OTP was sent' };
-    if (user.emailVerified)
-      return { message: 'Email is already verified. Please login.' };
-
-    await this.issueEmailVerificationOtp(user.id, user.email);
-
-    return { message: 'If that email exists, an OTP was sent' };
-  }
-
   // ── Refresh Token ─────────────────────────
   async refreshToken(token: string) {
     const stored = await this.prisma.refreshToken.findUnique({
@@ -163,7 +153,12 @@ export class AuthService {
   }
 
   // ── Resend OTP ──────────────────────────────
-  async resendOtp(dto: ForgotPasswordDto) {
+  async resendOtp(dto: ResendOtpDto) {
+    if (dto.purpose === 'verification') {
+      await this.issueEmailVerificationOtpByEmail(dto.email);
+      return { message: 'If that email exists, an OTP was sent' };
+    }
+
     await this.issuePasswordResetOtp(dto.email);
 
     return { message: 'If that email exists, an OTP was sent' };
@@ -277,6 +272,15 @@ export class AuthService {
       otp,
       expiresInMinutes: 10,
     });
+  }
+
+  private async issueEmailVerificationOtpByEmail(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    if (!user || user.emailVerified) return;
+
+    await this.issueEmailVerificationOtp(user.id, user.email);
   }
 
   private async sendOtpEmail(params: {
