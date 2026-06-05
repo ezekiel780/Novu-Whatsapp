@@ -44,6 +44,7 @@ import { MediaModule } from './media/media.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { GatewayModule } from './gateway/gateway.module';
 import { RedisModule } from './redis/redis.module';
+import { MailModule } from './mail/mail.module';
 let AppModule = (() => {
     let _classDecorators = [Module({
             imports: [
