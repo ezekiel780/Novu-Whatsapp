@@ -3,7 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { GlobalExceptionFilter } from './filters/http-exception.filter';
-import compression from 'compression';                    // ← fix this line
+import compression from 'compression';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -35,6 +35,11 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
+
+  // Health check route
+  app.getHttpAdapter().get('/', (req, res) => {
+    res.send({ status: 'ok', message: 'Novu API is running' });
+  });
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

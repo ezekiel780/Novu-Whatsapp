@@ -9,10 +9,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   constructor(private config: ConfigService) {}
 
   onModuleInit() {
-    this.client = new Redis({
-      host: this.config.get('REDIS_HOST'),
-      port: this.config.get<number>('REDIS_PORT'),
+    const redisUrl = this.config.get('REDIS_URL');
+
+    this.client = new Redis(redisUrl, {
       retryStrategy: (times) => Math.min(times * 50, 2000),
+      tls: redisUrl?.startsWith('rediss://') ? {} : undefined,
     });
 
     this.client.on('connect', () =>
@@ -78,7 +79,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return result === 1;
   }
 
-
   async setOffline(userId: string) {
     await this.client.del(`presence:${userId}`);
   }
@@ -97,7 +97,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return current <= limit;
   }
 
-
   async cacheUser(userId: string, data: any) {
     await this.set(`user:${userId}`, data, 300);
   }
@@ -106,7 +105,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.get<T>(`user:${userId}`);
   }
 
- 
   async invalidateUser(userId: string) {
     await this.del(`user:${userId}`);
   }
@@ -114,7 +112,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async cacheConversation(conversationId: string, data: any) {
     await this.set(`conversation:${conversationId}`, data, 120);
   }
-
 
   async getCachedConversation<T>(conversationId: string): Promise<T | null> {
     return this.get<T>(`conversation:${conversationId}`);
