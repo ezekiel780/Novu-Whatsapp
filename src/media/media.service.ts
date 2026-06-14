@@ -5,34 +5,22 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
-import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { v2 as cloudinary } from 'cloudinary';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class MediaService {
-  private s3: S3Client;
-  private bucket: string;
-
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
   ) {
-    this.s3 = new S3Client({
-      region: this.config.get('AWS_REGION'),
-      credentials: {
-        accessKeyId: this.config.get('AWS_ACCESS_KEY_ID'),
-        secretAccessKey: this.config.get('AWS_SECRET_ACCESS_KEY'),
-      },
+    cloudinary.config({
+      cloud_name: this.config.get('CLOUDINARY_CLOUD_NAME'),
+      api_key: this.config.get('CLOUDINARY_API_KEY'),
+      api_secret: this.config.get('CLOUDINARY_API_SECRET'),
     });
-    this.bucket = this.config.get('AWS_S3_BUCKET');
   }
 
-  // ── Upload File ───────────────────────────
   async uploadFile(
     userId: string,
     file: Express.Multer.File,
@@ -40,23 +28,24 @@ export class MediaService {
   ) {
     this.validateFile(file);
 
-    const key = `uploads/${userId}/${uuidv4()}-${file.originalname}`;
-
-    await this.s3.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-      }),
-    );
-
-    const fileUrl = `https://${this.bucket}.s3.${this.config.get('AWS_REGION')}.amazonaws.com/${key}`;
+    const result = await new Promise<any>((resolve, reject) => {
+      cloudinary.uploader.upload_stream(
+        {
+          folder: `novu/${userId}`,
+          public_id: uuidv4(),
+          resource_type: 'auto',
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        },
+      ).end(file.buffer);
+    });
 
     const media = await this.prisma.media.create({
       data: {
         uploadedBy: userId,
-        fileUrl,
+        fileUrl: result.secure_url,
         fileType: file.mimetype,
         fileSize: file.size,
         fileName: file.originalname,
@@ -67,24 +56,14 @@ export class MediaService {
     return media;
   }
 
-  // ── Get Signed URL ────────────────────────
   async getSignedUrl(userId: string, fileName: string, fileType: string) {
-    const key = `uploads/${userId}/${uuidv4()}-${fileName}`;
-
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      ContentType: fileType,
+    const publicId = `novu/${userId}/${uuidv4()}-${fileName}`;
+    const signedUrl = cloudinary.utils.private_download_url(publicId, fileType, {
+      expires_at: Math.floor(Date.now() / 1000) + 300,
     });
-
-    const signedUrl = await getSignedUrl(this.s3, command, {
-      expiresIn: 300,
-    });
-
-    return { signedUrl, key, fileUrl: `https://${this.bucket}.s3.${this.config.get('AWS_REGION')}.amazonaws.com/${key}` };
+    return { signedUrl, fileUrl: signedUrl };
   }
 
-  // ── Get Media By Message ──────────────────
   async getMediaByMessage(messageId: string) {
     return this.prisma.media.findMany({
       where: { messageId },
@@ -92,7 +71,6 @@ export class MediaService {
     });
   }
 
-  // ── Get My Media ──────────────────────────
   async getMyMedia(userId: string) {
     return this.prisma.media.findMany({
       where: { uploadedBy: userId },
@@ -100,7 +78,6 @@ export class MediaService {
     });
   }
 
-  // ── Delete Media ──────────────────────────
   async deleteMedia(userId: string, mediaId: string) {
     const media = await this.prisma.media.findUnique({
       where: { id: mediaId },
@@ -110,23 +87,15 @@ export class MediaService {
     if (media.uploadedBy !== userId)
       throw new BadRequestException('You can only delete your own media');
 
-    const key = media.fileUrl.split('.amazonaws.com/')[1];
-
-    await this.s3.send(
-      new DeleteObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-      }),
-    );
-
+    const publicId = media.fileUrl.split('/').slice(-2).join('/').split('.')[0];
+    await cloudinary.uploader.destroy(publicId);
     await this.prisma.media.delete({ where: { id: mediaId } });
 
     return { message: 'Media deleted successfully' };
   }
 
-  // ── Validate File ─────────────────────────
   private validateFile(file: Express.Multer.File) {
-    const maxSize = 100 * 1024 * 1024; // 100MB
+    const maxSize = 100 * 1024 * 1024;
     const allowedTypes = [
       'image/jpeg',
       'image/png',
