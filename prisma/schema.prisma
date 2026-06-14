@@ -6,7 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-
 enum Role {
   USER
   ADMIN
@@ -57,28 +56,27 @@ enum NotificationType {
   SYSTEM
 }
 
-
 model User {
-  id          String    @id @default(uuid())
-  email       String    @unique
-  phoneNumber String?   @unique
-  password    String
+  id                           String    @id @default(uuid())
+  email                        String    @unique
+  phoneNumber                  String?   @unique
+  password                     String
   emailVerified                Boolean   @default(false)
   emailVerificationOtpHash     String?
   emailVerificationOtpExpiresAt DateTime?
   passwordResetOtpHash         String?
   passwordResetOtpExpiresAt    DateTime?
-  displayName String
-  avatarUrl   String?
-  bio         String?
-  fcmToken    String? 
-  status      String?   @default("Hey there! I am using Novu")
-  isOnline    Boolean   @default(false)
-  lastSeen    DateTime  @default(now())
-  role        Role      @default(USER)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  displayName                  String
+  avatarUrl                    String?
+  bio                          String?
+  fcmToken                     String?
+  status                       String?   @default("Hey there! I am using Novu")
+  isOnline                     Boolean   @default(false)
+  lastSeen                     DateTime  @default(now())
+  role                         Role      @default(USER)
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+  deletedAt                    DateTime?
 
   sentMessages        Message[]            @relation("SentMessages")
   conversationMembers ConversationMember[]
@@ -87,8 +85,24 @@ model User {
   notifications       Notification[]
   uploadedMedia       Media[]
   refreshTokens       RefreshToken[]
+  contacts            Contact[]            @relation("UserContacts")
+  contactOf           Contact[]            @relation("ContactOf")
 
   @@map("users")
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  userId    String
+  contactId String
+  createdAt DateTime @default(now())
+
+  user    User @relation("UserContacts", fields: [userId], references: [id], onDelete: Cascade)
+  contact User @relation("ContactOf", fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contactId])
+  @@index([userId])
+  @@map("contacts")
 }
 
 model RefreshToken {
@@ -120,7 +134,6 @@ model Conversation {
   @@map("conversations")
 }
 
-
 model ConversationMember {
   id             String     @id @default(uuid())
   conversationId String
@@ -137,7 +150,6 @@ model ConversationMember {
   @@index([conversationId, leftAt])
   @@map("conversation_members")
 }
-
 
 model Message {
   id             String        @id @default(uuid())
@@ -163,7 +175,6 @@ model Message {
   @@map("messages")
 }
 
-
 model Media {
   id         String   @id @default(uuid())
   messageId  String?
@@ -181,7 +192,6 @@ model Media {
   @@index([messageId])
   @@map("media")
 }
-
 
 model Call {
   id         String     @id @default(uuid())
@@ -201,7 +211,6 @@ model Call {
   @@index([status])
   @@map("calls")
 }
-
 
 model Notification {
   id        String           @id @default(uuid())

@@ -12,6 +12,7 @@ import { GatewayModule } from './gateway/gateway.module';
 import { RedisModule } from './redis/redis.module';
 import { QueuesModule } from './queues/queues.module';
 import { MailModule } from './mail/mail.module';
+import { ContactsModule } from './contacts/contacts.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { MailModule } from './mail/mail.module';
     NotificationsModule,
     GatewayModule,
     QueuesModule,
+    ContactsModule,
   ],
 })
 export class AppModule {}
