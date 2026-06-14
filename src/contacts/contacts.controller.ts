@@ -19,6 +19,11 @@ import {
   export class ContactsController {
     constructor(private contactsService: ContactsService) {}
   
+    @Get('search')
+    searchUsers(@Req() req: any, @Query('q') query: string) {
+      return this.contactsService.searchUsers(req.user.id, query ?? '');
+    }
+  
     @Get()
     getContacts(@Req() req: any) {
       return this.contactsService.getContacts(req.user.id);
@@ -32,11 +37,6 @@ import {
     @Delete(':contactId')
     removeContact(@Req() req: any, @Param('contactId') contactId: string) {
       return this.contactsService.removeContact(req.user.id, contactId);
-    }
-  
-    @Get('search')
-    searchUsers(@Req() req: any, @Query('q') query: string) {
-      return this.contactsService.searchUsers(req.user.id, query ?? '');
     }
   }
   
