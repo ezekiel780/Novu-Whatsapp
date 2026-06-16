@@ -16,4 +16,8 @@ export class CreateMessageDto {
   @IsOptional()
   @IsString()
   replyToId?: string;
+
+  @IsOptional()
+  @IsString()
+  mediaId?: string;
 }

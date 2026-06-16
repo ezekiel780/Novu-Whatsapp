@@ -51,13 +51,43 @@ export class MessagesService {
       },
     });
 
+    // Link media to message if mediaId provided
+    if (dto.mediaId) {
+      await this.prisma.media.update({
+        where: { id: dto.mediaId },
+        data: { messageId: message.id },
+      });
+    }
+
     // Update conversation updatedAt
     await this.prisma.conversation.update({
       where: { id: dto.conversationId },
       data: { updatedAt: new Date() },
     });
 
-    return message;
+    // Re-fetch message with media attached
+    return this.prisma.message.findUnique({
+      where: { id: message.id },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+        replyTo: {
+          select: {
+            id: true,
+            content: true,
+            sender: {
+              select: { displayName: true },
+            },
+          },
+        },
+        media: true,
+      },
+    });
   }
 
   // ── Get Messages ──────────────────────────
